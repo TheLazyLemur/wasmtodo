@@ -1,9 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"syscall/js"
+	"wasmgame/storage"
 )
 
 type Todo struct {
@@ -60,14 +60,14 @@ func renderTodos() {
 		button.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 			todos[index].Complete = !todos[index].Complete
 			renderTodos()
-			persistToLocalStorage()
+			storage.PersistToLocalStorage(todos)
 			return nil
 		}))
 
 		delButton.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 			todos = append(todos[:index], todos[index+1:]...)
 			renderTodos()
-			persistToLocalStorage()
+			storage.PersistToLocalStorage(todos)
 			return nil
 		}))
 	}
@@ -77,29 +77,6 @@ func renderTodos() {
 		completed.Set("innerHTML", "Completed")
 		completed.Set("classList", "text-center text-3xl font-bold")
 		container.Call("appendChild", completed)
-	}
-}
-
-func persistToLocalStorage() {
-	v, err := json.Marshal(todos)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	w := js.Global().Get("window")
-	ls := w.Get("localStorage")
-	ls.Call("setItem", "todos", string(v))
-}
-
-func getFromLocalStorage() {
-	w := js.Global().Get("window")
-	ls := w.Get("localStorage")
-	r := ls.Call("getItem", "todos")
-	fmt.Println(r.String())
-
-	err := json.Unmarshal([]byte(r.String()), &todos)
-	if err != nil {
-		fmt.Println(err)
 	}
 }
 
@@ -124,25 +101,26 @@ func renderForm() {
 		}
 		todos = append(todos, todo)
 		fmt.Println(args[0].Get("target").Get("value").String())
-		persistToLocalStorage()
+		storage.PersistToLocalStorage(todos)
 		renderTodos()
 		return nil
 	}))
 }
 
 func main() {
-	getFromLocalStorage()
+	fromDb := storage.GetFromLocalStorage()
+	for _, v := range fromDb {
+		r := v.(map[string]interface{})
+		td := Todo{
+			Name:     r["Name"].(string),
+			Complete: r["Complete"].(bool),
+		}
+		todos = append(todos, &td)
+	}
 
 	container.Set("classList", "flex flex-col")
 
 	renderTodos()
-
-	// ticker := time.NewTicker(1 * time.Second)
-	// go func() {
-	// 	for range ticker.C {
-	// 		renderTodos()
-	// 	}
-	// }()
 
 	select {}
 }
